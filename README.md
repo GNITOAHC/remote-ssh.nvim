@@ -2,6 +2,8 @@
 
 The effortless Neovim remote development experience.
 
+[![asciicast](https://asciinema.org/a/MPFHkDTLnFa6qoiM.svg)](https://asciinema.org/a/MPFHkDTLnFa6qoiM)
+
 **remote-ssh.nvim** brings a true VSCode-like Remote-SSH experience to Neovim. No local plugins, no complex configuration. Just run `rnvim user@host` and start coding with your local UI connected to a high-performance remote backend.
 
 ## Why remote-ssh.nvim?
