@@ -47,14 +47,27 @@ fn main() -> Result<()> {
 }
 
 fn find_nvim() -> Option<String> {
-    let candidates = [
+    // Build the ~/.local/bin/nvim path from HOME at runtime so it works for any user.
+    let home_local = std::env::var("HOME")
+        .map(|h| format!("{}/.local/bin/nvim", h))
+        .unwrap_or_default();
+
+    let static_candidates = [
         "nvim",
         "/usr/bin/nvim",
         "/usr/local/bin/nvim",
         "/opt/homebrew/bin/nvim",
         "/home/linuxbrew/.linuxbrew/bin/nvim",
     ];
-    for candidate in candidates {
+
+    let all: Vec<&str> = std::iter::once(home_local.as_str())
+        .chain(static_candidates)
+        .collect();
+
+    for candidate in all {
+        if candidate.is_empty() {
+            continue;
+        }
         if std::process::Command::new(candidate)
             .arg("--version")
             .stdout(std::process::Stdio::null())
