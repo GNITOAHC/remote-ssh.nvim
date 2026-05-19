@@ -6,10 +6,9 @@ mod session;
 mod ssh;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use cli::{Cli, Cmd, ConnectArgs};
 use reqwest::Client;
-use std::ffi::OsString;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::info;
@@ -24,18 +23,23 @@ async fn main() -> Result<()> {
         .with_target(false)
         .init();
 
-    match Cli::parse().command {
-        Cmd::Session { action } => session::handle_action(action),
-        Cmd::Connect(raw_args) => run_connect(raw_args).await,
+    let cli = Cli::parse();
+
+    if let Some(cmd) = cli.command {
+        match cmd {
+            Cmd::Session { action } => session::handle_action(action),
+        }
+    } else if let Some(host) = cli.connect.host.clone() {
+        run_connect(host, cli.connect).await
+    } else {
+        Cli::command().print_help()?;
+        println!(); // Add a newline after help
+        Ok(())
     }
 }
 
-async fn run_connect(raw_args: Vec<OsString>) -> Result<()> {
-    let args = ConnectArgs::try_parse_from(
-        std::iter::once(OsString::from("rnvim")).chain(raw_args),
-    )?;
-
-    let target = &args.host;
+async fn run_connect(host: String, args: ConnectArgs) -> Result<()> {
+    let target = &host;
     let port = args.port;
     let server_path = &args.server_path;
 
@@ -54,7 +58,7 @@ async fn run_connect(raw_args: Vec<OsString>) -> Result<()> {
     bootstrap::ensure_server(&conn, server_path, &http).await?;
 
     // Step 3: Determine working directory via session memory or interactive prompt.
-    let working_dir = resolve_working_dir(&conn, target, port, server_path, args.new_session).await?;
+    let working_dir = resolve_working_dir(&conn, target, port, server_path, args.new_session, args.no_save_session).await?;
     info!("Working directory: {}", working_dir);
 
     // Step 4: Start the remote headless nvim server in the chosen directory.
@@ -97,6 +101,7 @@ async fn resolve_working_dir(
     port: u16,
     server_path: &str,
     force_new: bool,
+    no_save: bool,
 ) -> Result<String> {
     let existing = session::sessions_for_host(host);
 
@@ -104,7 +109,9 @@ async fn resolve_working_dir(
         let choice = tokio::task::block_in_place(|| prompt::pick_or_new_session(&existing));
         if let Some(idx) = choice {
             let dir = existing[idx].directory.clone();
-            session::mark_used(host, &dir);
+            if !no_save {
+                session::mark_used(host, &dir);
+            }
             return Ok(dir);
         }
         // User chose "New session" — fall through to prompt.
@@ -112,7 +119,9 @@ async fn resolve_working_dir(
 
     // Interactive directory prompt with remote autocomplete.
     let dir = prompt::prompt_directory(conn).await?;
-    let name = tokio::task::block_in_place(prompt::prompt_name);
-    session::add(host, &dir, port, server_path, name.as_deref());
+    if !no_save {
+        let name = tokio::task::block_in_place(prompt::prompt_name);
+        session::add(host, &dir, port, server_path, name.as_deref());
+    }
     Ok(dir)
 }

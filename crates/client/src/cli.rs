@@ -1,12 +1,14 @@
-use std::ffi::OsString;
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use common::{DEFAULT_PORT, DEFAULT_SERVER_PATH};
 
 #[derive(Parser, Debug)]
 #[command(name = "rnvim", version, about = "Edit remote files with local Neovim over SSH")]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Cmd,
+    pub command: Option<Cmd>,
+
+    #[command(flatten)]
+    pub connect: ConnectArgs,
 }
 
 #[derive(Subcommand, Debug)]
@@ -16,14 +18,12 @@ pub enum Cmd {
         #[command(subcommand)]
         action: SessionAction,
     },
-    /// Connect to [user@]host — any unrecognized subcommand is treated as the host
-    #[command(external_subcommand)]
-    Connect(Vec<OsString>),
 }
 
 #[derive(Subcommand, Debug)]
 pub enum SessionAction {
     /// List all saved sessions
+    #[command(alias = "ls")]
     List,
     /// Add a session manually
     Add {
@@ -49,12 +49,10 @@ pub enum SessionAction {
     },
 }
 
-/// Parsed from the external_subcommand catch-all args.
-#[derive(Parser, Debug)]
-#[command(name = "rnvim")]
+#[derive(Args, Debug)]
 pub struct ConnectArgs {
     /// Remote host in [user@]host format
-    pub host: String,
+    pub host: Option<String>,
 
     /// TCP port used for the nvim socket
     #[arg(long, default_value_t = DEFAULT_PORT)]
@@ -67,4 +65,8 @@ pub struct ConnectArgs {
     /// Force directory prompt even if saved sessions exist for this host
     #[arg(long)]
     pub new_session: bool,
+
+    /// Do not save this connection as a session for future use
+    #[arg(long, short = 'n')]
+    pub no_save_session: bool,
 }
