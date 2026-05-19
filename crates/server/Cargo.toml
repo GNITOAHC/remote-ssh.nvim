@@ -1,0 +1,13 @@
+[package]
+name = "rnvim-server"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "rnvim-server"
+path = "src/main.rs"
+
+[dependencies]
+anyhow  = { workspace = true }
+clap    = { workspace = true }
+common  = { workspace = true }

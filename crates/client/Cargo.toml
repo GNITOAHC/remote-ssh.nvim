@@ -1,0 +1,19 @@
+[package]
+name = "rnvim"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "rnvim"
+path = "src/main.rs"
+
+[dependencies]
+anyhow             = { workspace = true }
+clap               = { workspace = true }
+common             = { workspace = true }
+reqwest            = { workspace = true }
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+tokio              = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true }
