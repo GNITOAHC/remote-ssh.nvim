@@ -8,8 +8,8 @@ use tracing::{debug, info};
 /// A live SSH connection via ControlMaster.
 /// All commands reuse the mux socket — auth happens once at `connect()`.
 pub struct SshConn {
-    target: String,
-    socket: PathBuf,
+    pub(crate) target: String,
+    pub(crate) socket: PathBuf,
 }
 
 impl SshConn {
@@ -55,7 +55,6 @@ impl SshConn {
     }
 
     /// Run a command on the remote and return trimmed stdout.
-    /// Stderr is inherited so the user sees any SSH diagnostics.
     pub async fn run_remote(&self, remote_cmd: &str) -> Result<String> {
         debug!("ssh {} {:?}", self.target, remote_cmd);
         let [a, b, c, d] = self.ctl_args();
@@ -125,9 +124,21 @@ impl SshConn {
     }
 
     /// Start the server on the remote as a detached background process via `ssh -f`.
-    pub async fn start_remote_server(&self, server_path: &str, port: u16) -> Result<()> {
+    /// If `working_dir` is set, the server runs inside that directory.
+    pub async fn start_remote_server(
+        &self,
+        server_path: &str,
+        port: u16,
+        working_dir: Option<&str>,
+    ) -> Result<()> {
         info!("Starting remote server on port {}...", port);
-        let remote_cmd = format!("{} --port {}", server_path, port);
+        let base_cmd = format!("{} --port {}", server_path, port);
+        let remote_cmd = if let Some(dir) = working_dir {
+            let dir = dir.replacen('~', "$HOME", 1);
+            format!("cd {} && {}", dir, base_cmd)
+        } else {
+            base_cmd
+        };
         let [a, b, c, d] = self.ctl_args();
 
         let status = Command::new("ssh")
