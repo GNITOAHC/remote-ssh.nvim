@@ -29,25 +29,28 @@ async fn main() -> Result<()> {
     info!("remote-ssh v{}", common::VERSION);
     info!("target: {}  port: {}  server: {}", target, port, server_path);
 
+    // Step 1: Establish SSH connection (handles password / host-key prompts interactively).
+    let conn = ssh::SshConn::connect(target).await?;
+
     let http = Client::builder()
         .timeout(Duration::from_secs(120))
         .build()
         .context("failed to build HTTP client")?;
 
-    // Step 1: Install server binary if missing.
-    bootstrap::ensure_server(target, server_path, &http).await?;
+    // Step 2: Install server binary if missing.
+    bootstrap::ensure_server(&conn, server_path, &http).await?;
 
-    // Step 2: Start the remote headless nvim server.
-    ssh::start_remote_server(target, server_path, port).await?;
+    // Step 3: Start the remote headless nvim server.
+    conn.start_remote_server(server_path, port).await?;
 
-    // Step 3: Open the SSH port-forward tunnel.
-    let mut tunnel = ssh::start_port_forward(target, port).await?;
+    // Step 4: Open the SSH port-forward tunnel.
+    let mut tunnel = conn.start_port_forward(port).await?;
     info!("tunnel ready: localhost:{} -> {}:{}", port, target, port);
 
-    // Step 4: Give nvim a moment to start listening.
+    // Step 5: Give nvim a moment to start listening.
     sleep(Duration::from_secs(1)).await;
 
-    // Step 5: Spawn (not exec) the local nvim UI so we can kill the tunnel after it exits.
+    // Step 6: Spawn (not exec) the local nvim UI so we can kill the tunnel after it exits.
     let server_addr = format!("localhost:{}", port);
     info!("connecting: nvim --remote-ui --server {}", server_addr);
 
@@ -57,7 +60,7 @@ async fn main() -> Result<()> {
         .await
         .context("failed to spawn nvim — is nvim installed?")?;
 
-    // Step 6: nvim exited — tear down the SSH tunnel.
+    // Step 7: nvim exited — tear down the SSH tunnel and connection.
     tunnel.kill().await.ok();
     tunnel.wait().await.ok();
     info!("tunnel closed.");

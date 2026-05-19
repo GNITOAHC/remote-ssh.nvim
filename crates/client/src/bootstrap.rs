@@ -7,16 +7,16 @@ use crate::{github, ssh};
 
 /// Ensure the server binary exists and is executable on the remote.
 /// Downloads and installs it from GitHub Releases if missing.
-pub async fn ensure_server(target: &str, server_path: &str, http: &Client) -> Result<()> {
-    let exists = ssh::check_server_exists(target, server_path).await?;
+pub async fn ensure_server(conn: &ssh::SshConn, server_path: &str, http: &Client) -> Result<()> {
+    let exists = conn.check_server_exists(server_path).await?;
     if exists {
-        info!("Server binary already present at {}:{}", target, server_path);
+        info!("Server binary already present at {}", server_path);
         return Ok(());
     }
 
     info!("Server binary not found — bootstrapping...");
 
-    let uname = ssh::detect_remote_platform(target).await?;
+    let uname = conn.detect_remote_platform().await?;
     info!("Remote platform: {}", uname);
 
     let platform = platform_from_uname(&uname).ok_or_else(|| {
@@ -27,7 +27,7 @@ pub async fn ensure_server(target: &str, server_path: &str, http: &Client) -> Re
     })?;
 
     let binary = github::download_server_binary(http, platform).await?;
-    ssh::upload_binary(target, server_path, &binary).await?;
+    conn.upload_binary(server_path, &binary).await?;
 
     info!("Bootstrap complete.");
     Ok(())
