@@ -153,6 +153,29 @@ impl SshConn {
         Ok(())
     }
 
+    /// Rsync local nvim config to the remote using the existing ControlMaster socket.
+    pub async fn sync_config(&self, local_path: &str, remote_path: &str) -> Result<()> {
+        let local_src = format!("{}/", local_path.trim_end_matches('/'));
+        let dest = format!("{}:{}", self.target, remote_path);
+        let ssh_cmd = format!(
+            "ssh -o ControlMaster=no -o ControlPath={}",
+            self.socket.to_string_lossy()
+        );
+
+        info!("Syncing config: {} -> {}:{}", local_src, self.target, remote_path);
+        let status = tokio::process::Command::new("rsync")
+            .args(["-az", "--delete", "-e", &ssh_cmd, &local_src, &dest])
+            .status()
+            .await
+            .context("failed to spawn rsync — is rsync installed on this machine?")?;
+
+        if !status.success() {
+            bail!("config sync failed: rsync exited with status {}", status);
+        }
+        info!("Config sync complete.");
+        Ok(())
+    }
+
     /// Spawn a background SSH port-forward process.
     /// Caller must keep the returned `Child` alive for the duration of the session.
     pub async fn start_port_forward(&self, port: u16) -> Result<tokio::process::Child> {

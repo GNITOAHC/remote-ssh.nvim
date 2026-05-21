@@ -41,6 +41,9 @@ pub enum SessionAction {
         /// Path to rnvim-server on the remote
         #[arg(long, default_value = DEFAULT_SERVER_PATH)]
         server_path: String,
+        /// Enable config sync for this session
+        #[arg(long)]
+        sync_config: bool,
     },
     /// Remove a session — accepts index, name, or host:dir
     Rm {
@@ -69,4 +72,20 @@ pub struct ConnectArgs {
     /// Do not save this connection as a session for future use
     #[arg(long, short = 'n')]
     pub no_save_session: bool,
+
+    /// Sync local ~/.config/nvim to remote before connecting
+    #[arg(long)]
+    pub sync_config: bool,
+
+    /// Skip config sync even if the session has sync enabled
+    #[arg(long, conflicts_with = "sync_config")]
+    pub no_sync_config: bool,
+
+    /// Local nvim config directory to sync (default: ~/.config/nvim)
+    #[arg(long)]
+    pub local_config: Option<String>,
+
+    /// Remote nvim config directory to sync to (default: ~/.config/nvim)
+    #[arg(long)]
+    pub remote_config: Option<String>,
 }

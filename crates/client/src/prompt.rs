@@ -1,6 +1,6 @@
 use anyhow::Result;
 use inquire::autocompletion::Replacement;
-use inquire::{Autocomplete, CustomUserError, Select, Text};
+use inquire::{Autocomplete, Confirm, CustomUserError, Select, Text};
 use std::borrow::Cow;
 use std::process::Stdio;
 
@@ -199,6 +199,24 @@ pub fn prompt_name() -> Option<String> {
         .ok()
         .flatten()
         .filter(|s| !s.is_empty())
+}
+
+/// Ask whether to sync local nvim config to remote for this session.
+pub fn prompt_sync_config() -> bool {
+    Confirm::new("Sync local ~/.config/nvim to remote before connecting?")
+        .with_default(false)
+        .with_help_message("Uses rsync over the existing SSH connection")
+        .prompt()
+        .unwrap_or(false)
+}
+
+/// Show a selection list of all sessions. Returns `Some(index)` or `None` on cancel.
+pub fn pick_session(sessions: &[Session]) -> Option<usize> {
+    let items: Vec<String> = sessions.iter().map(|s| s.label()).collect();
+    let ans = Select::new("Select session:", items.clone())
+        .prompt()
+        .ok()?;
+    items.iter().position(|i| *i == ans)
 }
 
 /// Show a selection list of saved sessions + "New session" option.
