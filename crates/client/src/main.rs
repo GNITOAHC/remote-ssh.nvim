@@ -112,7 +112,14 @@ fn resolve_sync(
 async fn run_global_session_picker(sessions: Vec<session::Session>, args: ConnectArgs) -> Result<()> {
     let choice = tokio::task::block_in_place(|| prompt::pick_session(&sessions));
     match choice {
-        Some(idx) => run_connect_session(sessions[idx].clone(), args).await,
+        Some(Some(idx)) => run_connect_session(sessions[idx].clone(), args).await,
+        Some(None) => {
+            let host = tokio::task::block_in_place(prompt::prompt_host);
+            match host {
+                Some(h) => run_connect(h, args).await,
+                None => Ok(()),
+            }
+        }
         None => Ok(()),
     }
 }

@@ -210,13 +210,25 @@ pub fn prompt_sync_config() -> bool {
         .unwrap_or(false)
 }
 
-/// Show a selection list of all sessions. Returns `Some(index)` or `None` on cancel.
-pub fn pick_session(sessions: &[Session]) -> Option<usize> {
-    let items: Vec<String> = sessions.iter().map(|s| s.label()).collect();
-    let ans = Select::new("Select session:", items.clone())
+/// Show a global session list with "+ New session" at the bottom.
+/// Returns `Some(Some(idx))` for an existing session, `Some(None)` for new, `None` on cancel.
+pub fn pick_session(sessions: &[Session]) -> Option<Option<usize>> {
+    let mut items: Vec<String> = sessions.iter().map(|s| s.label()).collect();
+    items.push("+ New session".to_string());
+
+    match Select::new("Select session:", items.clone()).prompt() {
+        Ok(ans) if ans == "+ New session" => Some(None),
+        Ok(ans) => Some(items.iter().position(|i| *i == ans)),
+        Err(_) => None,
+    }
+}
+
+/// Prompt for a remote host in [user@]host format.
+pub fn prompt_host() -> Option<String> {
+    Text::new("Remote host ([user@]host):")
         .prompt()
-        .ok()?;
-    items.iter().position(|i| *i == ans)
+        .ok()
+        .filter(|s| !s.is_empty())
 }
 
 /// Show a selection list of saved sessions + "New session" option.
