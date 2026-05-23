@@ -138,14 +138,6 @@ pub fn add(
 pub fn resolve(target: &str) -> Result<usize> {
     let sessions = load();
 
-    // Try integer index first.
-    if let Ok(idx) = target.parse::<usize>() {
-        if idx < sessions.len() {
-            return Ok(idx);
-        }
-        return Err(anyhow!("index {} out of range (have {} sessions)", idx, sessions.len()));
-    }
-
     // Try name match.
     if let Some(idx) = sessions.iter().position(|s| s.name.as_deref() == Some(target)) {
         return Ok(idx);
@@ -159,6 +151,14 @@ pub fn resolve(target: &str) -> Result<usize> {
             return Ok(idx);
         }
     }
+
+    // Try integer index.
+    if let Ok(idx) = target.parse::<usize>() {
+        if idx < sessions.len() {
+            return Ok(idx);
+        }
+        return Err(anyhow!("index {} out of range (have {} sessions)", idx, sessions.len()));
+    } 
 
     Err(anyhow!("no session matching '{}'", target))
 }
