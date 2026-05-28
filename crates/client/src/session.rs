@@ -16,7 +16,7 @@ pub struct Session {
     #[serde(default)]
     pub local_config: Option<String>,
     #[serde(default)]
-    pub remote_config: Option<String>,
+    pub appname: Option<String>,
 }
 
 impl Session {
@@ -91,6 +91,8 @@ pub fn sessions_for_host(host: &str) -> Vec<Session> {
     sessions
 }
 
+/// Upsert a session for (host, dir). Updates metadata if the pair already exists,
+/// pushes a new entry otherwise.
 pub fn add(
     host: &str,
     dir: &str,
@@ -99,7 +101,7 @@ pub fn add(
     name: Option<&str>,
     sync_config: bool,
     local_config: Option<String>,
-    remote_config: Option<String>,
+    appname: Option<String>,
 ) {
     let mut sessions = load();
     if let Some(existing) = sessions
@@ -114,8 +116,8 @@ pub fn add(
         if local_config.is_some() {
             existing.local_config = local_config;
         }
-        if remote_config.is_some() {
-            existing.remote_config = remote_config;
+        if appname.is_some() {
+            existing.appname = appname;
         }
     } else {
         sessions.push(Session {
@@ -127,7 +129,7 @@ pub fn add(
             last_used: now_secs(),
             sync_config,
             local_config,
-            remote_config,
+            appname,
         });
     }
     save(&sessions);
@@ -192,8 +194,8 @@ pub fn handle_action(action: crate::cli::SessionAction) -> Result<()> {
                 }
             }
         }
-        SessionAction::Add { host, dir, name, port, server_path, sync_config } => {
-            add(&host, &dir, port, &server_path, name.as_deref(), sync_config, None, None);
+        SessionAction::Add { host, dir, name, port, server_path, sync_config, appname } => {
+            add(&host, &dir, port, &server_path, name.as_deref(), sync_config, None, appname);
             println!("Session saved: {} → {}", host, dir);
         }
         SessionAction::Rm { target } => {

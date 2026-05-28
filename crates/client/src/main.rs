@@ -82,12 +82,13 @@ fn rsync_available() -> bool {
 
 /// Determine sync paths for this run. Returns None if sync is disabled.
 /// Precedence: --no-sync-config > --sync-config > session preference.
-/// Paths: CLI arg > session stored > default (~/.config/nvim).
+/// Local path: CLI arg > session stored > OS default (~/.config/nvim).
+/// Remote path: derived from appname as ~/.config/<appname>, or ~/.config/nvim if unset.
 fn resolve_sync(
     args: &ConnectArgs,
     session_sync: bool,
     session_local: Option<&str>,
-    session_remote: Option<&str>,
+    session_appname: Option<&str>,
 ) -> Option<(String, String)> {
     if args.no_sync_config {
         return None;
@@ -101,14 +102,19 @@ fn resolve_sync(
         .map(str::to_string)
         .unwrap_or_else(default_nvim_config_dir);
 
-    let remote_path = args.remote_config.as_deref()
-        .or(session_remote)
-        .map(str::to_string)
-        .unwrap_or_else(|| "~/.config/nvim".to_string());
+    // Derive the remote config directory from the effective appname (CLI > session > default).
+    let effective_appname = args.appname.as_deref().or(session_appname);
+    let remote_path = match effective_appname {
+        Some(name) => format!("~/.config/{}", name),
+        None => "~/.config/nvim".to_string(),
+    };
 
     Some((local_path, remote_path))
 }
 
+/// Show the session picker when no host argument is given.
+/// `pick_session` returns: Some(Some(idx)) → chosen session, Some(None) → "new session",
+/// None → user dismissed (Esc/Ctrl-C).
 async fn run_global_session_picker(sessions: Vec<session::Session>, args: ConnectArgs) -> Result<()> {
     let choice = tokio::task::block_in_place(|| prompt::pick_session(&sessions));
     match choice {
@@ -124,6 +130,7 @@ async fn run_global_session_picker(sessions: Vec<session::Session>, args: Connec
     }
 }
 
+/// Connect using a saved session: bootstrap server, optionally sync config, then attach nvim UI.
 async fn run_connect_session(sess: session::Session, args: ConnectArgs) -> Result<()> {
     info!("remote-ssh v{}", common::VERSION);
     info!("target: {}  port: {}  server: {}", sess.host, sess.port, sess.server_path);
@@ -145,7 +152,7 @@ async fn run_connect_session(sess: session::Session, args: ConnectArgs) -> Resul
         &args,
         sess.sync_config,
         sess.local_config.as_deref(),
-        sess.remote_config.as_deref(),
+        sess.appname.as_deref(),
     ) {
         if has_rsync {
             conn.sync_config(&local_path, &remote_path)
@@ -159,7 +166,8 @@ async fn run_connect_session(sess: session::Session, args: ConnectArgs) -> Resul
         }
     }
 
-    conn.start_remote_server(&sess.server_path, sess.port, Some(&sess.directory)).await?;
+    let effective_appname = args.appname.as_deref().or(sess.appname.as_deref());
+    conn.start_remote_server(&sess.server_path, sess.port, Some(&sess.directory), effective_appname).await?;
 
     let mut tunnel = conn.start_port_forward(sess.port).await?;
     info!("tunnel ready: localhost:{} -> {}:{}", sess.port, sess.host, sess.port);
@@ -185,6 +193,8 @@ async fn run_connect_session(sess: session::Session, args: ConnectArgs) -> Resul
     Ok(())
 }
 
+/// First-time or ad-hoc connect to a host: prompt for directory, bootstrap server,
+/// optionally sync config, then attach nvim UI.
 async fn run_connect(host: String, args: ConnectArgs) -> Result<()> {
     let target = &host;
     let port = args.port;
@@ -207,7 +217,7 @@ async fn run_connect(host: String, args: ConnectArgs) -> Result<()> {
     bootstrap::ensure_server(&conn, server_path, &http).await?;
 
     // Step 3: Determine working directory via session memory or interactive prompt.
-    let (working_dir, session_sync, session_local, session_remote) =
+    let (working_dir, session_sync, session_local, session_appname) =
         resolve_working_dir(&conn, target, &args, has_rsync).await?;
     info!("Working directory: {}", working_dir);
 
@@ -216,7 +226,7 @@ async fn run_connect(host: String, args: ConnectArgs) -> Result<()> {
         &args,
         session_sync,
         session_local.as_deref(),
-        session_remote.as_deref(),
+        session_appname.as_deref(),
     ) {
         if has_rsync {
             conn.sync_config(&local_path, &remote_path)
@@ -231,7 +241,8 @@ async fn run_connect(host: String, args: ConnectArgs) -> Result<()> {
     }
 
     // Step 4: Start the remote headless nvim server in the chosen directory.
-    conn.start_remote_server(server_path, port, Some(&working_dir)).await?;
+    let effective_appname = args.appname.as_deref().or(session_appname.as_deref());
+    conn.start_remote_server(server_path, port, Some(&working_dir), effective_appname).await?;
 
     // Step 5: Open the SSH port-forward tunnel.
     let mut tunnel = conn.start_port_forward(port).await?;
@@ -262,7 +273,7 @@ async fn run_connect(host: String, args: ConnectArgs) -> Result<()> {
 }
 
 /// Pick or prompt for the remote working directory.
-/// Returns (dir, sync_config, local_config, remote_config).
+/// Returns (dir, sync_config, local_config, appname).
 /// - Existing sessions for this host → show picker (unless --new-session).
 /// - No sessions or user chose "New session" → interactive prompt with autocomplete.
 async fn resolve_working_dir(
@@ -280,11 +291,11 @@ async fn resolve_working_dir(
             let dir = sess.directory.clone();
             let sync = sess.sync_config;
             let local = sess.local_config.clone();
-            let remote = sess.remote_config.clone();
+            let appname = sess.appname.clone();
             if !args.no_save_session {
                 session::mark_used(host, &dir);
             }
-            return Ok((dir, sync, local, remote));
+            return Ok((dir, sync, local, appname));
         }
         // User chose "New session" — fall through to prompt.
     }
@@ -307,7 +318,7 @@ async fn resolve_working_dir(
 
     let name = tokio::task::block_in_place(prompt::prompt_name);
     let local = args.local_config.clone();
-    let remote = args.remote_config.clone();
+    let appname = args.appname.clone();
 
     session::add(
         host,
@@ -317,8 +328,8 @@ async fn resolve_working_dir(
         name.as_deref(),
         want_sync,
         local.clone(),
-        remote.clone(),
+        appname.clone(),
     );
 
-    Ok((dir, want_sync, local, remote))
+    Ok((dir, want_sync, local, appname))
 }

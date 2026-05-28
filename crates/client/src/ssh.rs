@@ -45,6 +45,8 @@ impl SshConn {
         Ok(Self { target: target.to_string(), socket })
     }
 
+    /// Returns the four SSH args that route through the ControlMaster socket.
+    /// Reused by every subsequent SSH/rsync call so auth only happens once.
     fn ctl_args(&self) -> [String; 4] {
         [
             "-o".into(),
@@ -125,14 +127,20 @@ impl SshConn {
 
     /// Start the server on the remote as a detached background process via `ssh -f`.
     /// If `working_dir` is set, the server runs inside that directory.
+    /// If `appname` is set, `NVIM_APPNAME=<appname>` is prepended to the shell command so
+    /// the server process (and the nvim it exec()s) inherits the correct config directory.
     pub async fn start_remote_server(
         &self,
         server_path: &str,
         port: u16,
         working_dir: Option<&str>,
+        appname: Option<&str>,
     ) -> Result<()> {
         info!("Starting remote server on port {}...", port);
-        let base_cmd = format!("{} --port {}", server_path, port);
+        let env_prefix = appname
+            .map(|a| format!("NVIM_APPNAME={} ", a))
+            .unwrap_or_default();
+        let base_cmd = format!("{}{} --port {}", env_prefix, server_path, port);
         let remote_cmd = if let Some(dir) = working_dir {
             let dir = dir.replacen('~', "$HOME", 1);
             format!("cd {} && {}", dir, base_cmd)

@@ -44,6 +44,9 @@ pub enum SessionAction {
         /// Enable config sync for this session
         #[arg(long)]
         sync_config: bool,
+        /// NVIM_APPNAME on the remote (sets config dir to ~/.config/<appname>)
+        #[arg(long)]
+        appname: Option<String>,
     },
     /// Remove a session — accepts index, name, or host:dir
     Rm {
@@ -85,7 +88,8 @@ pub struct ConnectArgs {
     #[arg(long)]
     pub local_config: Option<String>,
 
-    /// Remote nvim config directory to sync to (default: ~/.config/nvim)
+    /// NVIM_APPNAME on the remote — sets config dir to ~/.config/<appname> and passes
+    /// NVIM_APPNAME=<appname> to the headless nvim server process
     #[arg(long)]
-    pub remote_config: Option<String>,
+    pub appname: Option<String>,
 }
