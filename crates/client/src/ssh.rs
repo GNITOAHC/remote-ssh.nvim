@@ -141,12 +141,16 @@ impl SshConn {
             .map(|a| format!("NVIM_APPNAME={} ", a))
             .unwrap_or_default();
         let base_cmd = format!("{}{} --port {}", env_prefix, server_path, port);
-        let remote_cmd = if let Some(dir) = working_dir {
+        let inner = if let Some(dir) = working_dir {
             let dir = dir.replacen('~', "$HOME", 1);
             format!("cd {} && {}", dir, base_cmd)
         } else {
             base_cmd
         };
+        // Interactive login shell: -l sources ~/.bash_profile, -i forces ~/.bashrc past the
+        // common `case $- in *i*) ;; *) return;; esac` guard so nvm/mise/asdf init actually runs.
+        let escaped = inner.replace('\'', r"'\''");
+        let remote_cmd = format!("bash -ilc '{}'", escaped);
         let [a, b, c, d] = self.ctl_args();
 
         let status = Command::new("ssh")
